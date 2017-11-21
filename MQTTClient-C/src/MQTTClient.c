@@ -337,6 +337,10 @@ exit:
     return rc;
 }
 
+int MQTTIsConnected(MQTTClient* client)
+{
+  return client->isconnected;
+}
 
 int MQTTYield(MQTTClient* c, int timeout_ms)
 {
