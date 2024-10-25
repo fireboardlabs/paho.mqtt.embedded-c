@@ -150,13 +150,9 @@ static int readPacket(MQTTClient* c, Timer* timer)
     header.byte = c->readbuf[0];
     rc = header.bits.type;
     if (c->keepAliveInterval > 0)
-<<<<<<< Updated upstream
-        TimerCountdown(&c->last_received, c->keepAliveInterval + (c->keepAliveInterval / 2)); // record the fact that we have successfully received a packet
-=======
     {
-        TimerCountdown(&c->last_received, c->keepAliveInterval); // record the fact that we have successfully received a packet
+        TimerCountdown(&c->last_received, c->keepAliveInterval + (c->keepAliveInterval / 2)); // record the fact that we have successfully received a packet
     }
->>>>>>> Stashed changes
 exit:
     return rc;
 }
@@ -244,32 +240,20 @@ int keepalive(MQTTClient* c)
 
     if (TimerIsExpired(&c->last_sent) || TimerIsExpired(&c->last_received))
     {
-<<<<<<< Updated upstream
         if (c->ping_outstanding)
-            rc = FAILURE; /* PINGRESP not received in keepalive interval */
-        else
-=======
-        if (c->ping_outstanding && TimerIsExpired(&c->last_ping))
         {
             rc = FAILURE; /* PINGRESP not received in keepalive interval */
         }
         else if (!c->ping_outstanding)
->>>>>>> Stashed changes
         {
             Timer timer;
             TimerInit(&timer);
             TimerCountdownMS(&timer, 1000);
             int len = MQTTSerialize_pingreq(c->buf, c->buf_size);
-<<<<<<< Updated upstream
-            if (len > 0 && (rc = sendPacket(c, len, &timer)) == SUCCESS) // send the ping packet
-                c->ping_outstanding = 1;
-=======
             if (len > 0 && (rc = sendPacket(c, len, &timer)) == SUCCESS)
             {
                 c->ping_outstanding = 1; // send the ping packet
-                TimerCountdown(&c->last_ping, c->pingTimeout);
             }
->>>>>>> Stashed changes
         }
     }
 
