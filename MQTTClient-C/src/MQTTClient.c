@@ -22,6 +22,8 @@
 
 #include "fb_log.h"
 
+static const char* TAG = "fb_mqtt_client";
+
 static void NewMessageData(MessageData* md, MQTTString* aTopicName, MQTTMessage* aMessage) {
     md->topicName = aTopicName;
     md->message = aMessage;
@@ -253,6 +255,11 @@ int keepalive(MQTTClient* c)
             if (len > 0 && (rc = sendPacket(c, len, &timer)) == SUCCESS)
             {
                 c->ping_outstanding = 1; // send the ping packet
+                // ESP_LOGE(TAG, "keepalive() PINGREQ sent.");
+            }
+            else{
+                // ESP_LOGE(TAG, "keepalive() PINGREQ failed to send.");
+                FB_LOG_ERROR(len,"keepalive() PINGREQ failed to send.");
             }
         }
     }
@@ -289,7 +296,7 @@ int cycle(MQTTClient* c, Timer* timer)
     int len = 0;
     int rc = SUCCESS;
 
-    // ESP_LOGE("fb_mqtt_client", "cycle()");
+    // ESP_LOGE(TAG, "cycle()");
 
     int packet_type = readPacket(c, timer); // read the socket, see what work is due
 
@@ -297,28 +304,28 @@ int cycle(MQTTClient* c, Timer* timer)
     {
         default:
             // no more data to read, unrecoverable. Or readPacket() fails due to unexpected network error.
-            // ESP_LOGE("fb_mqtt_client", "unexpected readPacket() result, rc=%d", packet_type);
+            // ESP_LOGE(TAG, "unexpected readPacket() result, rc=%d", packet_type);
             FB_LOG_ERROR(packet_type, "unexpected readPacket() result, rc=%d", packet_type);
             rc = packet_type;
             goto exit;
         case 0: // timed out reading packet
-            // ESP_LOGE("fb_mqtt_client", "readPacket() timed out");
+            // ESP_LOGE(TAG, "readPacket() timed out");
             break;
         case CONNACK:
-            // ESP_LOGE("fb_mqtt_client", "CONNACK");
+            // ESP_LOGE(TAG, "CONNACK");
             break;
         case PUBACK:
-            // ESP_LOGE("fb_mqtt_client", "PUBACK");
+            // ESP_LOGE(TAG, "PUBACK");
             break;
         case SUBACK:
-            // ESP_LOGE("fb_mqtt_client", "SUBACK");
+            // ESP_LOGE(TAG, "SUBACK");
             break;
         case UNSUBACK:
-            // ESP_LOGE("fb_mqtt_client", "UNSUBACK");
+            // ESP_LOGE(TAG, "UNSUBACK");
             break;
         case PUBLISH:
             {
-                // ESP_LOGE("fb_mqtt_client", "PUBLISH");
+                // ESP_LOGE(TAG, "PUBLISH");
 
                 MQTTString topicName;
                 MQTTMessage msg;
@@ -352,7 +359,7 @@ int cycle(MQTTClient* c, Timer* timer)
     
                     if (rc == FAILURE)
                     {
-                        // ESP_LOGE("fb_mqtt_client", "PUBLISH sendPacket failed, rc=%d", rc);
+                        // ESP_LOGE(TAG, "PUBLISH sendPacket failed, rc=%d", rc);
                         FB_LOG_ERROR(rc, "PUBLISH sendPacket failed, rc=%d", rc);
                         goto exit; // there was a problem
                     }
@@ -360,11 +367,11 @@ int cycle(MQTTClient* c, Timer* timer)
             }
             break;
         case PUBREC:
-            // ESP_LOGE("fb_mqtt_client", "PUBREC");
+            // ESP_LOGE(TAG, "PUBREC");
             break;
         case PUBREL:
             {
-                // ESP_LOGE("fb_mqtt_client", "PUBREL");
+                // ESP_LOGE(TAG, "PUBREL");
                 unsigned short mypacketid;
                 unsigned char dup, type;
                 if (MQTTDeserialize_ack(&type, &dup, &mypacketid, c->readbuf, c->readbuf_size) != 1)
@@ -382,7 +389,7 @@ int cycle(MQTTClient* c, Timer* timer)
 
                 if (rc == FAILURE)
                 {
-                    // ESP_LOGE("fb_mqtt_client", "PUBREL sendPacket failed, rc=%d", rc);
+                    // ESP_LOGE(TAG, "PUBREL sendPacket failed, rc=%d", rc);
                     FB_LOG_ERROR(rc, "PUBREL sendPacket failed, rc=%d", rc);
                     goto exit; // there was a problem
                 }
@@ -390,10 +397,10 @@ int cycle(MQTTClient* c, Timer* timer)
             }
             break;
         case PUBCOMP:
-            // ESP_LOGE("fb_mqtt_client", "PUBCOMP");
+            // ESP_LOGE(TAG, "PUBCOMP");
             break;
         case PINGRESP:
-            // ESP_LOGE("fb_mqtt_client", "PINGRESP");
+            // ESP_LOGE(TAG, "PINGRESP");
             c->ping_outstanding = 0;
             break;
     }
@@ -420,7 +427,7 @@ int MQTTYield(MQTTClient* c, int timeout_ms)
     int rc = SUCCESS;
     Timer timer;
 
-    // ESP_LOGE("fb_mqtt_client", "MQTTYield() start");
+    // ESP_LOGE(TAG, "MQTTYield() start");
 
     TimerInit(&timer);
     TimerCountdownMS(&timer, timeout_ms);
@@ -435,7 +442,7 @@ int MQTTYield(MQTTClient* c, int timeout_ms)
         }
   	} while (!TimerIsExpired(&timer));
 
-    // ESP_LOGE("fb_mqtt_client", "MQTTYield() end");
+    // ESP_LOGE(TAG, "MQTTYield() end");
 
     return rc;
 }
@@ -476,7 +483,7 @@ int MQTTStartTask(MQTTClient* client)
 
 int waitfor(MQTTClient* c, int packet_type, Timer* timer)
 {
-    // ESP_LOGE("fb_mqtt_client", "waitfor() start");
+    // ESP_LOGE(TAG, "waitfor() start");
 
     int rc = FAILURE;
 
@@ -490,7 +497,7 @@ int waitfor(MQTTClient* c, int packet_type, Timer* timer)
         rc = cycle(c, timer);
     } while (rc != packet_type && rc >= SUCCESS);
 
-    // ESP_LOGE("fb_mqtt_client", "waitfor() end");
+    // ESP_LOGE(TAG, "waitfor() end");
 
     return rc;
 }
@@ -774,12 +781,12 @@ int MQTTPublish(MQTTClient* c, const char* topicName, MQTTMessage* message)
 
     if (len <= 0)
     {
-        // ESP_LOGE("fb_mqtt_client", "MQTTPublish() len <= 0");
+        // ESP_LOGE(TAG, "MQTTPublish() len <= 0");
         goto exit;
     }
     if ((rc = sendPacket(c, len, &timer)) != SUCCESS) // send the subscribe packet
     {
-        // ESP_LOGE("fb_mqtt_client", "MQTTPublish() sendPacket failed, rc=%d", rc);
+        // ESP_LOGE(TAG, "MQTTPublish() sendPacket failed, rc=%d", rc);
         FB_LOG_ERROR(rc, "MQTTPublish() sendPacket failed, rc=%d", rc);
         goto exit; // there was a problem
     }
