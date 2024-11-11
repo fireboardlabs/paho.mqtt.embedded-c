@@ -225,6 +225,13 @@ DLLExport int MQTTYield(MQTTClient* client, int time);
  */
 DLLExport int MQTTIsConnected(MQTTClient* client);
 
+/** MQTT Ping
+ * @param client - the client object to use
+ * @param ping_time_ms - output the response time of PINGRESP, clamped to the timeout value.
+ * @return truth value indicating whether a PINGREQ sent resulted in a RINGRESP.
+ */
+DLLExport int MQTTPing(MQTTClient* client, int* ping_time_ms);
+
 #if defined(MQTT_TASK)
 /** MQTT start background thread for a client.  After this, MQTTYield should not be called.
 *  @param client - the client object to use
