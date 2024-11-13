@@ -248,7 +248,7 @@ static int ping(MQTTClient* c, Timer* timer)
         ESP_LOGI(TAG, "ping() PINGREQ sent.");
 #endif
 #ifdef MQTTCLIENT_USE_FB_LOG
-        FB_LOG_INFO(len, "ping() PINGREQ sent.");
+        FB_LOG_DEBUG(len, "ping() PINGREQ sent.");
 #endif
         return SUCCESS;
     }
