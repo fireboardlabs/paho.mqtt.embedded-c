@@ -20,7 +20,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef MQTTCLIENT_USE_ESP_LOG
+#include "esp_log.h"
+#endif
+#ifdef MQTTCLIENT_USE_FB_LOG
 #include "fb_log.h"
+#endif
 
 static const char* TAG = "fb_mqtt_client";
 
@@ -79,9 +84,10 @@ void MQTTClientInit(MQTTClient* c, Network* network, unsigned int command_timeou
     c->cleansession = 0;
     c->ping_outstanding = 0;
     c->defaultMessageHandler = NULL;
-	  c->next_packetid = 1;
+    c->next_packetid = 1;
     TimerInit(&c->last_sent);
     TimerInit(&c->last_received);
+    TimerInit(&c->last_ping);
 #if defined(MQTT_TASK)
     MutexInit(&c->mutex);
 #endif
@@ -237,12 +243,22 @@ static int ping(MQTTClient* c, Timer* timer)
     if (len > 0 && (rc = sendPacket(c, len, timer)) == SUCCESS)
     {
         c->ping_outstanding = 1; // send the ping packet
-        // ESP_LOGI(TAG, "ping() PINGREQ sent.");
+        TimerCountdown(&c->last_ping, c->pingTimeout);
+#ifdef MQTTCLIENT_USE_ESP_LOG
+        ESP_LOGI(TAG, "ping() PINGREQ sent.");
+#endif
+#ifdef MQTTCLIENT_USE_FB_LOG
+        FB_LOG_INFO(len, "ping() PINGREQ sent.");
+#endif
         return SUCCESS;
     }
     else{
-        // ESP_LOGE(TAG, "ping() PINGREQ failed to send.");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+        ESP_LOGE(TAG, "ping() PINGREQ failed to send.");
+#endif
+#ifdef MQTTCLIENT_USE_FB_LOG
         FB_LOG_ERROR(len,"ping() PINGREQ failed to send.");
+#endif
     }
 
     return rc;
@@ -259,7 +275,7 @@ static int keepalive(MQTTClient* c)
 
     if (TimerIsExpired(&c->last_sent) || TimerIsExpired(&c->last_received))
     {
-        if (c->ping_outstanding)
+        if (c->ping_outstanding && TimerIsExpired(&c->last_ping))
         {
             rc = FAILURE; /* PINGRESP not received in keepalive interval */
         }
@@ -304,7 +320,9 @@ int cycle(MQTTClient* c, Timer* timer)
     int len = 0;
     int rc = SUCCESS;
 
-    // ESP_LOGI(TAG, "cycle()");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+    ESP_LOGI(TAG, "cycle()");
+#endif
 
     int packet_type = readPacket(c, timer); // read the socket, see what work is due
 
@@ -312,28 +330,44 @@ int cycle(MQTTClient* c, Timer* timer)
     {
         default:
             // no more data to read, unrecoverable. Or readPacket() fails due to unexpected network error.
-            // ESP_LOGE(TAG, "unexpected readPacket() result, rc=%d", packet_type);
+#ifdef MQTTCLIENT_USE_ESP_LOG
+            ESP_LOGE(TAG, "unexpected readPacket() result, rc=%d", packet_type);
+#endif
+#ifdef MQTTCLIENT_USE_FB_LOG
             FB_LOG_ERROR(packet_type, "unexpected readPacket() result, rc=%d", packet_type);
+#endif
             rc = packet_type;
             goto exit;
         case 0: // timed out reading packet
-            // ESP_LOGI(TAG, "readPacket() timed out");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+            ESP_LOGI(TAG, "readPacket() timed out");
+#endif
             break;
         case CONNACK:
-            // ESP_LOGI(TAG, "CONNACK");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+            ESP_LOGI(TAG, "CONNACK");
+#endif
             break;
         case PUBACK:
-            // ESP_LOGI(TAG, "PUBACK");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+            ESP_LOGI(TAG, "PUBACK");
+#endif
             break;
         case SUBACK:
-            // ESP_LOGI(TAG, "SUBACK");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+            ESP_LOGI(TAG, "SUBACK");
+#endif
             break;
         case UNSUBACK:
-            // ESP_LOGI(TAG, "UNSUBACK");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+            ESP_LOGI(TAG, "UNSUBACK");
+#endif
             break;
         case PUBLISH:
             {
-                // ESP_LOGI(TAG, "PUBLISH");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+                ESP_LOGI(TAG, "PUBLISH");
+#endif
 
                 MQTTString topicName;
                 MQTTMessage msg;
@@ -367,19 +401,27 @@ int cycle(MQTTClient* c, Timer* timer)
     
                     if (rc == FAILURE)
                     {
-                        // ESP_LOGE(TAG, "PUBLISH sendPacket failed, rc=%d", rc);
+#ifdef MQTTCLIENT_USE_ESP_LOG
+                        ESP_LOGE(TAG, "PUBLISH sendPacket failed, rc=%d", rc);
+#endif
+#ifdef MQTTCLIENT_USE_FB_LOG
                         FB_LOG_ERROR(rc, "PUBLISH sendPacket failed, rc=%d", rc);
+#endif
                         goto exit; // there was a problem
                     }
                 }
             }
             break;
         case PUBREC:
-            // ESP_LOGI(TAG, "PUBREC");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+            ESP_LOGI(TAG, "PUBREC");
+#endif
             break;
         case PUBREL:
             {
-                // ESP_LOGI(TAG, "PUBREL");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+                ESP_LOGI(TAG, "PUBREL");
+#endif
                 unsigned short mypacketid;
                 unsigned char dup, type;
                 if (MQTTDeserialize_ack(&type, &dup, &mypacketid, c->readbuf, c->readbuf_size) != 1)
@@ -397,18 +439,26 @@ int cycle(MQTTClient* c, Timer* timer)
 
                 if (rc == FAILURE)
                 {
-                    // ESP_LOGE(TAG, "PUBREL sendPacket failed, rc=%d", rc);
+#ifdef MQTTCLIENT_USE_ESP_LOG
+                    ESP_LOGE(TAG, "PUBREL sendPacket failed, rc=%d", rc);
+#endif
+#ifdef MQTTCLIENT_USE_FB_LOG
                     FB_LOG_ERROR(rc, "PUBREL sendPacket failed, rc=%d", rc);
+#endif
                     goto exit; // there was a problem
                 }
                 break;
             }
             break;
         case PUBCOMP:
-            // ESP_LOGI(TAG, "PUBCOMP");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+            ESP_LOGI(TAG, "PUBCOMP");
+#endif
             break;
         case PINGRESP:
-            // ESP_LOGI(TAG, "PINGRESP");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+            ESP_LOGI(TAG, "PINGRESP");
+#endif
             c->ping_outstanding = 0;
             break;
     }
@@ -435,7 +485,9 @@ int MQTTYield(MQTTClient* c, int timeout_ms)
     int rc = SUCCESS;
     Timer timer;
 
-    // ESP_LOGI(TAG, "MQTTYield() start");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+    ESP_LOGI(TAG, "MQTTYield() start");
+#endif
 
     TimerInit(&timer);
     TimerCountdownMS(&timer, timeout_ms);
@@ -450,7 +502,9 @@ int MQTTYield(MQTTClient* c, int timeout_ms)
         }
   	} while (!TimerIsExpired(&timer));
 
-    // ESP_LOGI(TAG, "MQTTYield() end");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+    ESP_LOGI(TAG, "MQTTYield() end");
+#endif
 
     return rc;
 }
@@ -491,7 +545,9 @@ int MQTTStartTask(MQTTClient* client)
 
 int waitfor(MQTTClient* c, int packet_type, Timer* timer)
 {
-    // ESP_LOGI(TAG, "waitfor() start");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+    ESP_LOGI(TAG, "waitfor() start");
+#endif
 
     int rc = FAILURE;
 
@@ -505,22 +561,33 @@ int waitfor(MQTTClient* c, int packet_type, Timer* timer)
         rc = cycle(c, timer);
     } while (rc != packet_type && rc >= SUCCESS);
 
-    // ESP_LOGI(TAG, "waitfor() end");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+    ESP_LOGI(TAG, "waitfor() end");
+#endif
 
     return rc;
 }
 
 int MQTTPing(MQTTClient* client, int* ping_time_ms){
-    Timer timer;
+    Timer req_timer;
+    TimerInit(&req_timer);
 
-    const int ping_timeout_ms = 10 * 1000;
+    Timer resp_timer;
+    TimerInit(&resp_timer);
 
-    TimerInit(&timer);
-    TimerCountdownMS(&timer, ping_timeout_ms);
+    TimerCountdown(&req_timer, 1);
+    int rc = ping(client, &req_timer);
+    if( rc != SUCCESS ){
+        return rc;
+    }
 
-    int rc = ping(client, &timer);
-    if( rc == SUCCESS && (waitfor(client, PINGRESP, &timer) == PINGRESP) ){
-        *ping_time_ms = ping_timeout_ms - TimerLeftMS(&timer);
+    TimerCountdown(&resp_timer, client->pingTimeout);
+    int packet_type = waitfor(client, PINGRESP, &resp_timer);
+    if( packet_type == PINGRESP ){
+        *ping_time_ms = (client->pingTimeout * 1000) - TimerLeftMS(&resp_timer);
+    }
+    else{
+        rc = FAILURE;
     }
 
     return rc;
@@ -551,6 +618,7 @@ int MQTTConnectWithResults(MQTTClient* c, MQTTPacket_connectData* options, MQTTC
     }
 
     c->keepAliveInterval = options->keepAliveInterval;
+    c->pingTimeout = options->pingTimeout;
     c->cleansession = options->cleansession;
     TimerCountdown(&c->last_received, c->keepAliveInterval + (c->keepAliveInterval / 2));
     if ((len = MQTTSerialize_connect(c->buf, c->buf_size, options)) <= 0)
@@ -802,13 +870,19 @@ int MQTTPublish(MQTTClient* c, const char* topicName, MQTTMessage* message)
 
     if (len <= 0)
     {
-        // ESP_LOGI(TAG, "MQTTPublish() len <= 0");
+#ifdef MQTTCLIENT_USE_ESP_LOG
+        ESP_LOGI(TAG, "MQTTPublish() len <= 0");
+#endif
         goto exit;
     }
     if ((rc = sendPacket(c, len, &timer)) != SUCCESS) // send the subscribe packet
     {
-        // ESP_LOGE(TAG, "MQTTPublish() sendPacket failed, rc=%d", rc);
+#ifdef MQTTCLIENT_USE_ESP_LOG
+        ESP_LOGE(TAG, "MQTTPublish() sendPacket failed, rc=%d", rc);
+#endif
+#ifdef MQTTCLIENT_USE_FB_LOG
         FB_LOG_ERROR(rc, "MQTTPublish() sendPacket failed, rc=%d", rc);
+#endif
         goto exit; // there was a problem
     }
 

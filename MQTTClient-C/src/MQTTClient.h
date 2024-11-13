@@ -48,7 +48,7 @@
 #define MAX_PACKET_ID 65535 /* according to the MQTT specification - do not change! */
 
 #if !defined(MAX_MESSAGE_HANDLERS)
-#define MAX_MESSAGE_HANDLERS 32 /* redefinable - how many subscriptions do you want? */
+#define MAX_MESSAGE_HANDLERS 5 /* redefinable - how many subscriptions do you want? */
 #endif
 
 enum QoS { QOS0, QOS1, QOS2, SUBFAIL=0x80 };
@@ -111,13 +111,14 @@ typedef void (*messageHandler)(MessageData*);
 
 typedef struct MQTTClient
 {
-    unsigned int next_packetid,
-      command_timeout_ms;
-    size_t buf_size,
-      readbuf_size;
-    unsigned char *buf,
-      *readbuf;
+    unsigned int next_packetid;
+    unsigned int command_timeout_ms;
+    size_t buf_size;
+    size_t readbuf_size;
+    unsigned char *buf;
+    unsigned char *readbuf;
     unsigned int keepAliveInterval;
+    unsigned int pingTimeout;
     char ping_outstanding;
     int isconnected;
     int cleansession;
@@ -131,7 +132,7 @@ typedef struct MQTTClient
     void (*defaultMessageHandler) (MessageData*);
 
     Network* ipstack;
-    Timer last_sent, last_received;
+    Timer last_sent, last_received, last_ping;
 #if defined(MQTT_TASK)
     Mutex mutex;
     Thread thread;
